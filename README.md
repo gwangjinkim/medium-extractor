@@ -30,12 +30,15 @@ A command-line tool to extract H2 and H3 headers and their associated IDs from M
 
     This command reads `pyproject.toml`, installs dependencies (like Selenium, Typer, etc.), and makes the `medium_extract` command available in your environment. `webdriver-manager` will automatically download the correct ChromeDriver the first time you run the script.
 
+
 ## Usage
 
-Run the command followed by the Medium article URL:
+-Run the command followed by the Medium article URL:
++Run the command followed by the Medium article URL you want to **scrape** (this can be a friend link to bypass paywalls):
 
 ```bash
-medium_extract <url-to-medium-blog>
+-medium_extract <url-to-medium-blog>
++medium_extract <scrape-url> [OPTIONS]
 ```
 
 By default, this will extract the headers, generate a temporary HTML file containing the headers as links, and attempt to open this file in your default web browser. You can then copy the rendered links from the browser page.
@@ -49,10 +52,19 @@ By default, this will extract the headers, generate a temporary HTML file contai
 ```bash
 medium_extract "https://medium.com/towards-data-science/perplexity-ai-is-a-big-deal-and-google-should-be-worried-18706708f917"
 ```
-(Your browser should open with the linked headers.)
+(Your browser should open with the linked headers pointing to https://medium.com/some-article-slug#header-id)
+
 
 **Output Options:**
 
+*   **Specify Link Base URL:** Use `--link-base-url` to provide a different URL 
+    (e.g., the clean, canonical URL) that should be used when constructing the `href` 
+    attributes in the generated ToC HTML. 
+    If omitted, the scraped URL (with query parameters stripped) is used.
+    ```bash
+    # Scrape using friend link, but generate links using the canonical URL
+    medium_extract "https://medium.com/article-slug-friendlink" --link-base-url "https://medium.com/article-slug"
+    ```
 *   **Save Permanent HTML File:** If you want to save the HTML file instead of opening a temporary one, use `--output-html` or `-o` followed by a filename. Headers without IDs will be omitted from the HTML file.
     ```bash
     medium_extract --output-html toc.html "YOUR_URL_HERE"
@@ -71,8 +83,23 @@ medium_extract "https://medium.com/towards-data-science/perplexity-ai-is-a-big-d
     medium_extract --timeout 30 "YOUR_URL_HERE"
     ```
 
+**How it Works:**
+
+1.  **New CLI Option:** `cli.py` now has a `--link-base-url` option (type `Optional[str]`).
+2.  **Argument Passed:** The value of `--link-base-url` (which is `None` if the option isn't used) is passed from the `main` function to the `_create_html_content` function.
+3.  **URL Choice in HTML Gen:** `_create_html_content` checks if `link_base_url_override` was provided.
+    *   If yes, it uses that URL as the base for creating the `href` links (after stripping query parameters).
+    *   If no (it's `None`), it falls back to using the original `scraped_url` (after stripping query parameters).
+4.  **Clarity in Output:** The generated HTML now explicitly states which URL was scraped and which base URL was used for the links within it.
+
+Now you can use the friend link for easy access by the script and still generate clean, canonical links for your final ToC.
+
+
+
 ## Notes
 
 *   Medium.com frequently changes its website structure. This scraper might break if they make significant changes to their HTML layout or class names.
 *   Web scraping can be resource-intensive (running a headless browser).
 *   Ensure you comply with Medium's Terms of Service regarding scraping. This tool is intended for personal, reasonable use.
+
+
