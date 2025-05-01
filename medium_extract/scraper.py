@@ -4,7 +4,7 @@ import time
 import logging
 from typing import List, Dict, Optional
 import re
-from pathlib import Path # Import Path
+from pathlib import Path
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -18,20 +18,22 @@ from bs4 import BeautifulSoup, Tag
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Keep the selector you want to test
-MAIN_CONTENT_SELECTOR = "article.meteredContent" # Or your current best guess
-LINK_PREVIEW_PARENT_SELECTOR = ".graf--miro" # Or your verified selector for previews
+# Use the confirmed container selector
+MAIN_CONTENT_SELECTOR = "article.meteredContent"
+
+# Use a verified selector for link preview wrappers
+LINK_PREVIEW_PARENT_SELECTOR = ".yl" # Class found wrapping the link previews
 
 def extract_medium_headers(
     url: str,
     timeout: int = 20,
-    save_source_path: Optional[Path] = None # New parameter
+    save_source_path: Optional[Path] = None
 ) -> Optional[List[Dict[str, Optional[str]]]]:
     """
-    Extracts H2 and H3 headers and their IDs from a Medium article's main body.
-    Optionally saves the full rendered HTML source for debugging.
+    Extracts H1, H2, H3 headers and their IDs from a Medium article's main body,
+    using 'article.meteredContent' selector and filtering link previews based on '.yl' class.
+    Checks parent elements for IDs if not found directly on the header tag.
     """
-    # ... (webdriver setup code remains the same) ...
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--disable-gpu")
@@ -42,7 +44,7 @@ def extract_medium_headers(
 
     driver = None
     headers_with_ids = []
-    rendered_html = None # Define outside try block
+    rendered_html = None
 
     try:
         logging.info("Setting up ChromeDriver...")
@@ -56,38 +58,32 @@ def extract_medium_headers(
         logging.info(f"Waiting up to {timeout}s for main content element ('{MAIN_CONTENT_SELECTOR}')...")
         try:
             main_content_element_locator = (By.CSS_SELECTOR, MAIN_CONTENT_SELECTOR)
+            # Ensure the element is not just present but also visible (might help with JS rendering)
             WebDriverWait(driver, timeout).until(
-                EC.presence_of_element_located(main_content_element_locator)
+                EC.visibility_of_element_located(main_content_element_locator)
             )
-            logging.info(f"Main content container found using selector: '{MAIN_CONTENT_SELECTOR}'")
-            # Wait a bit longer AFTER finding the container
-            time.sleep(5) # Increased sleep *after* finding element
+            logging.info(f"Main content container found and visible: '{MAIN_CONTENT_SELECTOR}'")
+            # Wait a bit longer AFTER finding the container and it being visible
+            time.sleep(3) # Allow JS inside the container to potentially finish
 
         except TimeoutException:
             logging.error(f"Timeout occurred while waiting for '{MAIN_CONTENT_SELECTOR}'.")
             logging.warning("Attempting to get page source anyway for debugging...")
-            # Try to get source even on timeout, before quitting
             try:
                 rendered_html = driver.page_source
-                logging.info("Grabbed page source after timeout.")
             except WebDriverException as e:
                  logging.error(f"Could not get page source after timeout: {e}")
-            # Now re-raise or handle the original timeout
-            logging.error(f"CRITICAL: Could not find the main content container using selector '{MAIN_CONTENT_SELECTOR}' within the timeout.")
-            logging.error("Selector might be incorrect, page structure changed, or loading took too long.")
-            # We return None below, after the finally block saves the source if requested/possible
-            return None # Indicate failure to find element
+            logging.error(f"CRITICAL: Could not find or ensure visibility of the main content container using selector '{MAIN_CONTENT_SELECTOR}' within the timeout.")
+            return None
 
-        # --- Get Page Source ---
         logging.info("Getting page source...")
-        rendered_html = driver.page_source # Get source after successful wait & sleep
+        rendered_html = driver.page_source
 
-        # --- Save Source If Requested ---
-        # Do this *before* parsing, so we save the raw source
         if save_source_path and rendered_html:
+            # ... (save source logic remains the same) ...
             logging.info(f"Saving rendered HTML source to: {save_source_path}")
             try:
-                save_source_path.parent.mkdir(parents=True, exist_ok=True) # Ensure dir exists
+                save_source_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(save_source_path, 'w', encoding='utf-8') as f:
                     f.write(rendered_html)
                 logging.info("HTML source saved successfully.")
@@ -97,42 +93,47 @@ def extract_medium_headers(
              logging.warning(f"Save source requested, but page source could not be retrieved.")
 
 
-        # --- Proceed with Parsing ---
         logging.info("Parsing rendered HTML...")
         soup = BeautifulSoup(rendered_html, 'html.parser')
 
         search_area = soup.select_one(MAIN_CONTENT_SELECTOR)
         if not search_area:
-             # If selector worked for wait but not BS4, log it, but don't necessarily fail extraction yet
-             logging.warning(f"Could not select '{MAIN_CONTENT_SELECTOR}' using BeautifulSoup, though Selenium wait succeeded. Searching entire page.")
-             search_area = soup # Fallback: search entire soup object
+             logging.error(f"Could not select the main content container '{MAIN_CONTENT_SELECTOR}' using BeautifulSoup.")
+             # Save source if possible before returning None
+             if save_source_path and rendered_html and not Path(save_source_path).exists():
+                 _save_source_in_finally(save_source_path, rendered_html) # Use a helper or repeat logic
+             return None
 
-        # ... (rest of the header finding and filtering logic remains the same) ...
-        logging.info(f"Searching for headers within the specific container: '{MAIN_CONTENT_SELECTOR}' (or fallback area)")
-        potential_headers = search_area.find_all(['h2', 'h3'], recursive=True)
 
-        logging.info(f"Found {len(potential_headers)} potential header tags within the search area.")
-        # ... (loop, filtering, ID checking, appending) ...
+        logging.info(f"Searching for H1, H2, H3 headers within: '{MAIN_CONTENT_SELECTOR}'")
+        # --- Include H1 in the search ---
+        potential_headers = search_area.find_all(['h1', 'h2', 'h3'], recursive=True)
+
+        logging.info(f"Found {len(potential_headers)} potential header tags within the specific container.")
 
         for header in potential_headers:
-            # Filter out headers inside link previews
-            preview_class = LINK_PREVIEW_PARENT_SELECTOR.strip('.')
-            if header.find_parent(lambda tag: tag.name and preview_class in tag.get('class', [])):
-                 logging.debug(f"Skipping header inside link preview ('{LINK_PREVIEW_PARENT_SELECTOR}'): '{header.get_text(strip=True)[:30]}...'")
+            # --- Filter based on '.yl' parent class ---
+            link_preview_class = LINK_PREVIEW_PARENT_SELECTOR.strip('.') # Remove leading dot
+            if header.find_parent(lambda tag: tag.name and link_preview_class in tag.get('class', [])):
+                 logging.debug(f"Skipping header inside link preview (.{link_preview_class}): '{header.get_text(strip=True)[:50]}...'")
                  continue
 
+            # Get ID directly from header first
             header_id = header.get('id')
             header_text = header.get_text(strip=True)
 
+            # Skip if no text content
             if not header_text:
                  logging.debug(f"Skipping empty header tag: {header.name}")
                  continue
 
+            # Check parent for ID only if direct ID is missing (fallback)
             if not header_id and isinstance(header.parent, Tag):
                 parent_id = header.parent.get('id')
+                # Basic check: If parent_id looks like a possible Medium ID
                 if parent_id and re.match(r'^[a-zA-Z0-9]{4,}$', parent_id):
                     header_id = parent_id
-                    logging.debug(f"Found ID '{header_id}' on parent of header: '{header_text[:30]}...'")
+                    logging.info(f"Found ID '{header_id}' on PARENT of '{header.name}' tag: '{header_text[:50]}...'") # Log as INFO if found on parent
 
             headers_with_ids.append({
                 'tag': header.name,
@@ -140,43 +141,51 @@ def extract_medium_headers(
                 'text': header_text
             })
 
-
         logging.info(f"Successfully extracted {len(headers_with_ids)} headers (after filtering link previews).")
         return headers_with_ids
 
+    # ... (Error handling and finally block, including final attempt to save source) ...
+    except TimeoutException:
+        logging.error(f"Timeout occurred while waiting for page elements or loading URL: {url}")
+        if driver and not rendered_html: # Try to get source if timeout happened before getting it
+             try: rendered_html = driver.page_source
+             except: pass
+        return None # Indicate failure
     except WebDriverException as e:
-        # Catch webdriver errors that might happen before getting source
         logging.error(f"WebDriver error occurred: {e}")
-        # Try to get source in finally block
-        if driver:
-            try:
-                rendered_html = driver.page_source # Try again
-            except: pass # Ignore error here, focus on original one
+        if driver and not rendered_html:
+             try: rendered_html = driver.page_source
+             except: pass
         return None
     except Exception as e:
         logging.error(f"An unexpected error occurred during scraping: {e}")
-        # Try to get source in finally block
-        if driver:
-            try:
-                rendered_html = driver.page_source # Try again
-            except: pass
+        if driver and not rendered_html:
+             try: rendered_html = driver.page_source
+             except: pass
         return None
     finally:
         # --- Save Source If Requested (in finally) ---
-        # This attempts to save even if an exception occurred after getting the source
-        if save_source_path and rendered_html:
-            if not Path(save_source_path).exists(): # Avoid writing twice if saved earlier
-                logging.info(f"Saving rendered HTML source to (from finally): {save_source_path}")
-                try:
-                    save_source_path.parent.mkdir(parents=True, exist_ok=True)
-                    with open(save_source_path, 'w', encoding='utf-8') as f:
-                        f.write(rendered_html)
-                    logging.info("HTML source saved successfully (from finally).")
-                except IOError as e:
-                    logging.error(f"Failed to save HTML source to {save_source_path} (from finally): {e}")
-        elif save_source_path:
-            logging.warning(f"Save source requested, but page source was not available in finally block.")
+        _save_source_in_finally(save_source_path, rendered_html) # Use helper
 
         if driver:
             logging.info("Closing browser...")
             driver.quit()
+
+
+# Helper function to avoid code duplication in finally
+def _save_source_in_finally(save_path: Optional[Path], html_source: Optional[str]):
+     if save_path and html_source:
+        # Check existence to prevent overwriting if saved successfully earlier
+        if not Path(save_path).exists():
+            logging.info(f"Saving rendered HTML source to (from finally): {save_path}")
+            try:
+                save_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(save_path, 'w', encoding='utf-8') as f:
+                    f.write(html_source)
+                logging.info("HTML source saved successfully (from finally).")
+            except IOError as e:
+                logging.error(f"Failed to save HTML source to {save_path} (from finally): {e}")
+        else:
+             logging.debug("Source file already exists (saved earlier). Skipping save in finally.")
+     elif save_path:
+         logging.warning(f"Save source requested, but page source was not available in finally block.")
