@@ -17,12 +17,8 @@ from bs4 import BeautifulSoup, Tag
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# --- !!! REVERTING TO A MORE COMMON PATTERN - VERIFY THIS !!! ---
-# Generated class names failed. Trying a more semantic guess.
-# *** YOU MUST INSPECT the page HTML in your browser and find the *actual*
-#     CSS selector for the element containing ONLY the main article body. ***
-# Replace this value if you find a better one (e.g., ".article-body", "#main-content")
-MAIN_CONTENT_SELECTOR = "div.postArticle-content" # <--- Trying this again. VERIFY!
+# --- !!! USING SELECTOR BASED ON USER INSPECTION / AI FEEDBACK !!! ---
+MAIN_CONTENT_SELECTOR = "article.meteredContent" # <--- Updated based on feedback
 
 # Selector for filtering out link previews (update if needed)
 LINK_PREVIEW_PARENT_SELECTOR = ".graf--miro" # Or your verified selector for previews
@@ -30,11 +26,11 @@ LINK_PREVIEW_PARENT_SELECTOR = ".graf--miro" # Or your verified selector for pre
 def extract_medium_headers(url: str, timeout: int = 20) -> Optional[List[Dict[str, Optional[str]]]]:
     """
     Extracts H2 and H3 headers and their IDs from a Medium article's main body,
-    using a common-pattern selector and filtering link previews.
+    using the 'article.meteredContent' selector and filtering link previews.
     Checks parent elements for IDs if not found directly on the header tag.
     """
     chrome_options = Options()
-    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--headless") # Re-enable headless if you commented it out
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
@@ -53,29 +49,17 @@ def extract_medium_headers(url: str, timeout: int = 20) -> Optional[List[Dict[st
         logging.info(f"Loading URL: {url}")
         driver.get(url)
 
-        # First, wait for the overall <article> tag to ensure the basic structure is loaded
-        logging.info(f"Waiting up to {timeout}s for article container (article tag)...")
+        # Wait directly for the specific 'article.meteredContent' element
+        logging.info(f"Waiting up to {timeout}s for main content element ('{MAIN_CONTENT_SELECTOR}')...")
         try:
-            WebDriverWait(driver, timeout).until(
-                EC.presence_of_element_located((By.TAG_NAME, "article"))
-            )
-            logging.info("Article tag found.")
-        except TimeoutException:
-             logging.error(f"CRITICAL: Could not find the main <article> tag within the timeout.")
-             return None
-
-        # Now, specifically wait for the main content container *within* the article
-        logging.info(f"Waiting up to {timeout}s for main content element ('article {MAIN_CONTENT_SELECTOR}')...")
-        try:
-            # Scope the search within the article tag for better accuracy
-            main_content_element_locator = (By.CSS_SELECTOR, f"article {MAIN_CONTENT_SELECTOR}")
+            main_content_element_locator = (By.CSS_SELECTOR, MAIN_CONTENT_SELECTOR)
             WebDriverWait(driver, timeout).until(
                 EC.presence_of_element_located(main_content_element_locator)
             )
-            logging.info(f"Precise main content container found using selector: '{MAIN_CONTENT_SELECTOR}' inside <article>")
+            logging.info(f"Main content container found using selector: '{MAIN_CONTENT_SELECTOR}'")
         except TimeoutException:
-            logging.error(f"CRITICAL: Could not find the specific main content container using selector 'article {MAIN_CONTENT_SELECTOR}' within the timeout.")
-            logging.error("Please inspect the page HTML and update MAIN_CONTENT_SELECTOR in scraper.py.")
+            logging.error(f"CRITICAL: Could not find the main content container using selector '{MAIN_CONTENT_SELECTOR}' within the timeout.")
+            logging.error("Selector might be incorrect, page structure changed, or loading took too long.")
             return None
 
         time.sleep(3) # Wait a bit longer after container found
@@ -87,29 +71,25 @@ def extract_medium_headers(url: str, timeout: int = 20) -> Optional[List[Dict[st
         soup = BeautifulSoup(rendered_html, 'html.parser')
 
         # --- Find Headers *only* within the precise main content container ---
-        article_tag = soup.find('article') # Find article tag again in BS4 context
-        if not article_tag:
-            logging.warning("Could not find article tag using BeautifulSoup (should not happen).")
-            return []
-
-        # Select the specific content container using BeautifulSoup, scoped within article
-        search_area = article_tag.select_one(MAIN_CONTENT_SELECTOR)
+        # Select the specific content container using BeautifulSoup
+        search_area = soup.select_one(MAIN_CONTENT_SELECTOR)
 
         if not search_area:
-             logging.error(f"Could not select the main content container '{MAIN_CONTENT_SELECTOR}' within the <article> tag using BeautifulSoup.")
-             return None
+             logging.error(f"Could not select the main content container '{MAIN_CONTENT_SELECTOR}' using BeautifulSoup after page load.")
+             return None # Fail if the container isn't found in the parsed HTML
+
 
         logging.info(f"Searching for headers within the specific container: '{MAIN_CONTENT_SELECTOR}'")
+        # Find headers that are direct children or descendants within the search area
         potential_headers = search_area.find_all(['h2', 'h3'], recursive=True)
 
         logging.info(f"Found {len(potential_headers)} potential header tags within the specific container.")
         if len(potential_headers) == 0:
-             logging.warning(f"No H2 or H3 tags found inside the specified main content container ('{MAIN_CONTENT_SELECTOR}'). Check the selector and page structure.")
+             logging.warning(f"No H2 or H3 tags found inside the specified main content container ('{MAIN_CONTENT_SELECTOR}').")
+
 
         for header in potential_headers:
             # Filter out headers inside link previews
-            # Check class using lambda (adjust selector if needed)
-            # Ensure LINK_PREVIEW_PARENT_SELECTOR starts with '.' if it's a class
             preview_class = LINK_PREVIEW_PARENT_SELECTOR.strip('.')
             if header.find_parent(lambda tag: tag.name and preview_class in tag.get('class', [])):
                  logging.debug(f"Skipping header inside link preview ('{LINK_PREVIEW_PARENT_SELECTOR}'): '{header.get_text(strip=True)[:30]}...'")
@@ -125,7 +105,8 @@ def extract_medium_headers(url: str, timeout: int = 20) -> Optional[List[Dict[st
             # Check parent for ID if needed
             if not header_id and isinstance(header.parent, Tag):
                 parent_id = header.parent.get('id')
-                if parent_id and re.match(r'^[a-zA-Z0-9]{4,}$', parent_id): # Check if it looks like a Medium ID
+                # Check if parent_id looks like a typical Medium ID (e.g., 4+ alphanumeric chars)
+                if parent_id and re.match(r'^[a-zA-Z0-9]{4,}$', parent_id):
                     header_id = parent_id
                     logging.debug(f"Found ID '{header_id}' on parent of header: '{header_text[:30]}...'")
 
