@@ -1,0 +1,37 @@
+# medium-extractor/pyproject.toml
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "medium_extract"
+version = "0.1.0"
+description = "Extracts headers (H2, H3) and their IDs from Medium articles."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [
+  { name = "Your Name", email = "your.email@example.com" }, # Optional: Update this
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Text Processing :: Markup :: HTML",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+]
+dependencies = [
+    "selenium >= 4.10.0",            # Browser automation
+    "webdriver-manager >= 4.0.0",  # Handles chromedriver download/management
+    "beautifulsoup4 >= 4.11.0",    # HTML parsing
+    "typer >= 0.9.0",              # For creating the CLI
+    "rich >= 13.0.0",              # Optional: For nicer console output (used by Typer)
+]
+
+[project.scripts]
+medium_extract = "medium_extract.cli:app"
+
+[project.urls] # Optional
+Homepage = "https://github.com/yourusername/medium-extractor" # Optional: Update this
