@@ -17,10 +17,20 @@ A command-line tool to extract H2 and H3 headers and their associated IDs from M
     ```
 
 2.  **Create and activate a virtual environment using uv:**
+    If you don't have `uv`, then first, install `uv`:
     ```bash
-    uv venv
-    source .venv/bin/activate  # On Windows use `.venv\Scripts\activate`
+    # macos/linux
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    
+    # windows (either use WSL2 ubuntu linux - command above) or Powershell
+    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
     ```
+
+    When uv installed, you can `sync`:
+    ```bash
+    uv sync
+    ```
+    This installs all dependencies listed in `pyproject.toml`.
 
 3.  **Install the package using uv:**
     ```bash
@@ -63,24 +73,24 @@ medium_extract "https://medium.com/towards-data-science/perplexity-ai-is-a-big-d
     If omitted, the scraped URL (with query parameters stripped) is used.
     ```bash
     # Scrape using friend link, but generate links using the canonical URL
-    medium_extract "https://medium.com/article-slug-friendlink" --link-base-url "https://medium.com/article-slug"
+    uv run medium_extract "https://medium.com/article-slug-friendlink" --link-base-url "https://medium.com/article-slug"
     ```
 *   **Save Permanent HTML File:** If you want to save the HTML file instead of opening a temporary one, use `--output-html` or `-o` followed by a filename. Headers without IDs will be omitted from the HTML file.
     ```bash
-    medium_extract --output-html toc.html "YOUR_URL_HERE"
-    medium_extract -o path/to/my_toc.html "YOUR_URL_HERE"
+    uv run medium_extract --output-html toc.html "YOUR_URL_HERE"
+    uv run medium_extract -o path/to/my_toc.html "YOUR_URL_HERE"
     ```
 *   **JSON Output:** Use the `--json` or `-j` flag to get the output in raw JSON format. *Note: This overrides HTML generation/opening.*
     ```bash
-    medium_extract --json "YOUR_URL_HERE"
+    uv run medium_extract --json "YOUR_URL_HERE"
     ```
 *   **Save Full Source HTML:** Use `--save-source` followed by a filename to save the complete HTML source code retrieved by Selenium *after* waiting for the page to load. This is useful for debugging selectors if extraction fails.
     ```bash
-    medium_extract --save-source debug_source.html "YOUR_URL_HERE"
+    uv run medium_extract --save-source debug_source.html "YOUR_URL_HERE"
     ```
 *   **Timeout:** Adjust the waiting time (in seconds) for page elements using `--timeout` or `-t`. Default is 20 seconds.
     ```bash
-    medium_extract --timeout 30 "YOUR_URL_HERE"
+    uv run medium_extract --timeout 30 "YOUR_URL_HERE"
     ```
 
 **How it Works:**
