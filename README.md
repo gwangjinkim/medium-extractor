@@ -12,11 +12,12 @@ A command-line tool to extract H2 and H3 headers and their associated IDs from M
 
 1.  **Clone the repository (or create the files manually):**
     ```bash
-    git clone https://github.com/yourusername/medium-extractor.git # Replace with your repo URL if applicable
+    git clone https://github.com/gwangjinkim/medium-extractor.git # Replace with your repo URL if applicable
     cd medium-extractor
     ```
 
 2.  **Create and activate a virtual environment using uv:**
+    
     If you don't have `uv`, then first, install `uv`:
     ```bash
     # macos/linux
