@@ -5,6 +5,8 @@ import json
 import logging # Add logging import
 import html # Import html module for escaping
 from pathlib import Path # To handle file paths
+from typing import Optional # <-- ADD THIS LINE
+
 from rich import print as rich_print # Use rich print for better formatting
 
 from .scraper import extract_medium_headers

@@ -38,13 +38,28 @@ Run the command followed by the Medium article URL:
 medium_extract <url-to-medium-blog>
 ```
 
-**Example:**
+By default, this will extract the headers, generate a temporary HTML file containing the headers as links, and attempt to open this file in your default web browser. You can then copy the rendered links from the browser page.
+
+
+
+
+
+**Example (Default Behavior):**
 
 ```bash
 medium_extract "https://medium.com/towards-data-science/perplexity-ai-is-a-big-deal-and-google-should-be-worried-18706708f917"
 ```
+(Your browser should open with the linked headers.)
 
 **Output Options:**
+
+*   **Save Permanent HTML File:** If you want to save the HTML file instead of opening 
+    a temporary one, use `--output-html` or `-o` followed by a filename. 
+    Headers without IDs will be omitted from the HTML file.
+    ```bash
+    medium_extract --output-html toc.html "YOUR_URL_HERE"
+    medium_extract -o path/to/my_toc.html "YOUR_URL_HERE"
+    ```
 
 *   **JSON Output:** Use the `--json` or `-j` flag to get the output in JSON format.
     ```bash
