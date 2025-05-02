@@ -118,6 +118,9 @@ def main(
     rich_print(f"[bold blue]Starting extraction for (scrape URL):[/bold blue] {url}")
     if link_base_url:
         rich_print(f"[bold blue]Using base URL for generated links:[/bold blue] {link_base_url}")
+    else:
+        link_base_url = url
+        rich_print(f"[bold blue]Using URL for generated links:[/bold blue] {url}")
     if save_source:
         rich_print(f"[bold yellow]Will save full HTML source to:[/bold yellow] {save_source}")
 
