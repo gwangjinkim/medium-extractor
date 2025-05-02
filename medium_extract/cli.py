@@ -72,9 +72,10 @@ def _create_html_content(
             header_text = header['text']
             safe_header_text = html.escape(header_text)
             # Use the determined base_link_href
-            link_url = f"{base_link_href}#{header_id}"
+            # link_url = f"{base_link_href}#{header_id}"
+            link_url = f"#{header_id}"                    ## stay on the same page!
             css_class = header['tag'] # Use h1, h2, h3 as class names
-            html_content += f'        <li class="{css_class}"><a href="{html.escape(link_url)}">{safe_header_text}</a></li>\n'
+            html_content += f'<li class="{css_class}"><a href="{html.escape(link_url)}">{safe_header_text}</a></li>\n'
         html_content += "    </ul>\n"
 
     if non_linkable_count > 0:
